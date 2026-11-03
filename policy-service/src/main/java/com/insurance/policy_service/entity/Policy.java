@@ -1,3 +1,4 @@
+
 package com.insurance.policy_service.entity;
 
 import jakarta.persistence.Entity;

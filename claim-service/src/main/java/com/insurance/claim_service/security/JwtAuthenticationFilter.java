@@ -35,12 +35,6 @@ public class JwtAuthenticationFilter
         String authorizationHeader =
                 request.getHeader("Authorization");
 
-        // DEBUG
-        System.out.println(
-                "Authorization received by CLAIM-SERVICE: "
-                        + authorizationHeader
-        );
-
         // No Authorization header
         if (authorizationHeader == null
                 || !authorizationHeader.startsWith("Bearer ")) {

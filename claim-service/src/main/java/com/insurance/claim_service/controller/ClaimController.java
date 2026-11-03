@@ -1,3 +1,4 @@
+
 package com.insurance.claim_service.controller;
 
 import com.insurance.claim_service.client.PolicyClient;
@@ -7,10 +8,11 @@ import com.insurance.claim_service.dto.SettlementResponse;
 import com.insurance.claim_service.entity.Claim;
 import com.insurance.claim_service.repository.ClaimRepository;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/claims")
@@ -30,51 +32,94 @@ public class ClaimController {
         this.settlementClient = settlementClient;
     }
 
+    // CREATE CLAIM
     @PostMapping
     public Claim createClaim(@RequestBody Claim claim) {
         return claimRepository.save(claim);
     }
 
+    // GET ALL CLAIMS
     @GetMapping
     public List<Claim> getAllClaims() {
         return claimRepository.findAll();
     }
 
+    // GET CLAIM BY NUMBER
     @GetMapping("/{claimNumber}")
-    public Optional<Claim> getClaimByNumber(
+    public Claim getClaimByNumber(
             @PathVariable String claimNumber) {
 
-        return claimRepository.findByClaimNumber(claimNumber);
+        return claimRepository.findByClaimNumber(claimNumber)
+                .orElseThrow(() ->
+                        new RuntimeException("Claim not found"));
     }
 
-    @GetMapping("/{claimNumber}/verify")
-    public String verifyClaim(
+    // UPDATE CLAIM
+    @PutMapping("/{claimNumber}")
+    public Claim updateClaim(
+            @PathVariable String claimNumber,
+            @RequestBody Claim updatedClaim) {
+
+        Claim claim = claimRepository
+                .findByClaimNumber(claimNumber)
+                .orElseThrow(() ->
+                        new RuntimeException("Claim not found"));
+
+        claim.setPolicyNumber(updatedClaim.getPolicyNumber());
+        claim.setClaimantName(updatedClaim.getClaimantName());
+        claim.setClaimAmount(updatedClaim.getClaimAmount());
+        claim.setStatus(updatedClaim.getStatus());
+
+        return claimRepository.save(claim);
+    }
+
+    // DELETE CLAIM
+    @DeleteMapping("/{claimNumber}")
+    public String deleteClaim(
             @PathVariable String claimNumber) {
 
-        Optional<Claim> claimOptional =
-                claimRepository.findByClaimNumber(claimNumber);
+        Claim claim = claimRepository
+                .findByClaimNumber(claimNumber)
+                .orElseThrow(() ->
+                        new RuntimeException("Claim not found"));
 
-        if (claimOptional.isEmpty()) {
-            return "Claim not found";
-        }
+        claimRepository.delete(claim);
 
-        Claim claim = claimOptional.get();
+        return "Claim deleted successfully";
+    }
 
-        // Check whether a settlement already exists
+    // VERIFY CLAIM AND CREATE SETTLEMENT
+    @PostMapping("/{claimNumber}/verify")
+    public String verifyClaim(
+            @PathVariable String claimNumber,
+            HttpServletRequest request) {
+
+        Claim claim = claimRepository
+                .findByClaimNumber(claimNumber)
+                .orElseThrow(() ->
+                        new RuntimeException("Claim not found"));
+
+        // Check whether settlement already exists
         SettlementResponse existingSettlement =
                 settlementClient.getSettlementByClaimNumber(
-                        claim.getClaimNumber()
-                );
+                        claim.getClaimNumber());
 
         if (existingSettlement != null) {
             return "Claim already settled. Settlement Number: "
                     + existingSettlement.getSettlementNumber();
         }
 
+        // Forward JWT token to Policy Service
+        String authorizationHeader =
+                request.getHeader("Authorization");
+
         // Get policy details
         PolicyResponse policy =
-                policyClient.getPolicy(claim.getPolicyNumber());
+                policyClient.getPolicy(
+                        claim.getPolicyNumber(),
+                        authorizationHeader);
 
+        // Check policy status
         if (!policy.isActive()) {
 
             claim.setStatus("REJECTED");
@@ -84,8 +129,7 @@ public class ClaimController {
         }
 
         // Check coverage limit
-        if (claim.getClaimAmount() >
-                policy.getCoverageLimit()) {
+        if (claim.getClaimAmount() > policy.getCoverageLimit()) {
 
             claim.setStatus("REJECTED");
             claimRepository.save(claim);
@@ -98,8 +142,7 @@ public class ClaimController {
                 settlementClient.createSettlement(
                         claim.getClaimNumber(),
                         claim.getPolicyNumber(),
-                        claim.getClaimAmount()
-                );
+                        claim.getClaimAmount());
 
         // Update claim status
         claim.setStatus("APPROVED");

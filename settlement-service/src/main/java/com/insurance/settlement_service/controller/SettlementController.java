@@ -1,3 +1,4 @@
+
 package com.insurance.settlement_service.controller;
 
 import com.insurance.settlement_service.entity.Settlement;
@@ -16,7 +17,6 @@ public class SettlementController {
 
     public SettlementController(
             SettlementRepository settlementRepository) {
-
         this.settlementRepository = settlementRepository;
     }
 
@@ -25,12 +25,10 @@ public class SettlementController {
     public Settlement createSettlement(
             @RequestBody Settlement settlement) {
 
-        // Generate settlement number
         settlement.setSettlementNumber(
                 "SET" + System.currentTimeMillis()
         );
 
-        // Set settlement status
         settlement.setStatus("CREATED");
 
         return settlementRepository.save(settlement);
@@ -39,7 +37,6 @@ public class SettlementController {
     // Get all settlements
     @GetMapping
     public List<Settlement> getAllSettlements() {
-
         return settlementRepository.findAll();
     }
 
@@ -59,5 +56,23 @@ public class SettlementController {
 
         return settlementRepository
                 .findByClaimNumber(claimNumber);
+    }
+
+    // Delete settlement by settlement number
+    @DeleteMapping("/{settlementNumber}")
+    public String deleteSettlement(
+            @PathVariable String settlementNumber) {
+
+        Optional<Settlement> settlement =
+                settlementRepository
+                        .findBySettlementNumber(settlementNumber);
+
+        if (settlement.isEmpty()) {
+            return "Settlement not found";
+        }
+
+        settlementRepository.delete(settlement.get());
+
+        return "Settlement deleted successfully";
     }
 }
